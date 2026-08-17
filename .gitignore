@@ -1,0 +1,19 @@
+# Raw inputs. The dispatch extract alone is 372 MB and the statewide TIGER
+# shapefile is 39 MB; both exceed what belongs in git. README.md documents
+# where to download them. Everything in data/processed/ is derived from these
+# and is committed.
+data/raw/
+data/geo/
+
+# Tableau workbook, 25 MB, superseded by the Folium maps in results/maps/
+*.twbx
+
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.DS_Store
+venv/
+.venv/
+.pytest_cache/

@@ -1,0 +1,39 @@
+Code,Name,Description
+1A , 1ST Alarm - Fire," 1st Alarm Fire  (residential, commercial, tunnel). Initial/lowest response."
+2A , 2ND Alarm - Fire," 2nd Alarm Fire  (residential, commercial, tunnel)"
+3A , 3RD Alarm - Fire," 3rd Alarm Fire  (residential, commercial, tunnel)"
+4A , 4TH Alarm - Fire," 4th Alarm Fire  (residential, commercial, tunnel)"
+5A , 5TH Alarm - Fire," 5th Alarm Fire (residential, commercial, tunnel, garage/auxiliary building). Highest response level"
+F0 ,Fire Emergency: Immediate threat, Immediate threat to life safety. 
+F1 ,Fire Emergency: Potential threat, Potential to become a threat to life safety. 
+F2 ,Fire Emergency: Occuring/just occurred, Incidents actively occurring or that has just occurred with no immediate threat to life. 
+F3 ,Fire Non-Emergency: No threat, No threat to life safety. 
+F4 ,Fire Notifications, All notification only calls types. 
+F5 ,Fire Admin Mark Outs, All administrative mark outs.
+Q0 , E-0 Quick Response Service - EMS ALS life threatening response w/ backup,EMS ALS life threatening response w/ backup
+Q1 , E-1 Quick Response Service - EMS ALS life threatening response,EMS ALS life threatening response
+Q2 , E-2 Quick Response Service - EMS Standard ALS response,EMS Standard ALS response
+Q3 , E-3 Quick Response Service - EMS Standard BLS response,EMS Standard BLS response
+Q4 , E-4 Quick Response Service - EMS BLS Assistance response,EMS BLS Assistance response
+E0,EMS ALS life threatening response w/ backup,EMS Advanced Life Support life threatening response with Advanced Life Support backup
+E1,EMS ALS life threatening response,EMS Advanced Life Support life threatening response
+E2,EMS Standard ALS response,EMS Standard Advanced Life Support response
+E3,EMS Standard BLS response,EMS Standard Basic Life Support response
+E4,EMS BLS Assistance response,EMS Basic Life Support Assistance response (i.e. lift assist)
+E5,EMS Admin Mark out, All administrative mark outs
+1C, 1ST Alarm - Fire - Commercial, 1st Alarm Fire  (commercial). Initial/lowest response.
+2C, 2ND Alarm - Fire - Commercial, 2nd Alarm Fire  (commercial)
+3C, 3RD Alarm - Fire - Commercial, 3rd Alarm Fire  (commercial)
+4C, 4TH Alarm - Fire - Commercial, 4th Alarm Fire  (commercial)
+5C, 5TH Alarm - Fire - Commercial, 5th Alarm Fire (commercial)
+6A, 6th Alarm - Fire - Commercial, 6th Alarm Fire (commercial)
+7A, 7th Alarm - Fire - Commercial, 7th Alarm Fire (commercial). Highest response level
+HR,Hi-Rise Fire,High-rise plan: 1 alarm fire that automatically goes to 3 alarms for very tall buildings
+P1,Police response 1,"Police reponse; likely not dispatched as EMS/Fire, just recorded in CAD system"
+P2,Police response 2,"Police reponse; likely not dispatched as EMS/Fire, just recorded in CAD system"
+P3,Police response 3,"Police reponse; likely not dispatched as EMS/Fire, just recorded in CAD system"
+M1,EMS Mass Casualty Plan - Level 1,EMS Mass Casualty Plan - Level 1 (lowest)
+M2,EMS Mass Casualty Plan - Level 2,EMS Mass Casualty Plan - Level 2
+M3,EMS Mass Casualty Plan - Level 3,EMS Mass Casualty Plan - Level 3
+M4,EMS Mass Casualty Plan - Level 4,"EMS Mass Casualty Plan - Level 4 (highest response, most ambulances)"
+,,
