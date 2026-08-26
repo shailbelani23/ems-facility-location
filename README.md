@@ -1,237 +1,209 @@
-# Where to put the ambulances
+# Where should Pittsburgh put its ambulance stations?
 
-Siting EMS stations in Pittsburgh with integer programming, on 635,235 real 911
-dispatches.
+A course project in operations research. The question is simple to state and
+harder to answer: if you are placing ambulance stations in a city, how many do
+you need, where do they go, and who ends up waiting longest?
 
-The question a city actually asks is not "where is the single best station" but
-"how many do we need, and who is left waiting". This repository answers both,
-using two classical facility-location models over ten years of Allegheny County
-dispatch records, and then checks the answer against the assumptions it rests
-on, because most of them turn out to matter more than the model does.
+I used ten years of real 911 dispatch records for the City of Pittsburgh and
+two classic facility location models to work it out.
 
 ---
 
-## Headline results
+## The setup
+
+The city is split into 389 census block groups. Each one is:
+
+- a **demand point**, because people there call 911, and
+- a **candidate site**, because a station could be built there.
+
+For every pair of block groups I compute a travel time, then decide whether a
+station in one could reach the other inside a target response time. The default
+target is 10 minutes. That gives a big table of yes/no answers called a
+**coverage matrix**, and both models are just different questions asked about
+that table.
+
+The data is 635,235 EMS dispatches from 2015 to 2024.
+
+---
+
+## The two models
+
+### Set cover: "leave nobody out"
+
+Find the smallest number of stations such that **every** block group is within
+10 minutes of at least one of them.
+
+```
+minimise   (number of stations opened)
+subject to every block group has at least one station that can reach it
+```
+
+Each station is a yes/no decision, which makes this an **integer program**. I
+solved it with Gurobi.
+
+**Answer: 4 stations.**
+
+### Maximal covering: "you only have a budget for p"
+
+Cities rarely get to build however many stations the math wants. So the second
+model fixes the number of stations at `p` and asks how much of the city you can
+reach with them.
+
+```
+maximise   (amount of demand covered)
+subject to exactly p stations are opened
+```
+
+**Answer with 3 stations: 388 of 389 block groups covered.**
+
+---
+
+## The main finding
+
+Set cover says 4 stations, maximal covering says 3 stations gets you almost
+everything. So what does the fourth station actually buy?
+
+**One block group. And that block group made one 911 call in ten years.**
+
+Three stations reach 99.9998% of the actual call volume. Set cover insists on
+covering every point on the map, so it pays for a whole extra station to reach
+the single most awkward one, even though essentially nobody lives there.
+
+This is the real lesson of the project: the constraint "cover everyone" sounds
+obviously correct, but in practice it means "cover the emptiest place," and it
+can cost you 25% of your budget. How you phrase the objective matters more than
+which solver you use.
 
 | | Set cover | Maximal covering (p = 3) |
 |---|---|---|
-| Stations | **4** | **3** |
-| Block groups covered within 10 min | 389 / 389 (100%) | 388 / 389 (99.7%) |
-| Call volume covered within 10 min | 100% | **99.9998%** |
-| Mean response time | 4.46 min | 5.22 min |
-| Call-weighted mean response | 4.13 min | 4.98 min |
-| Worst-case response | 9.94 min | 10.04 min |
-| Solve time | 0.03 s | 0.05 s |
-
-**The fourth station buys one block group, and that block group generated one
-call in ten years.** Set cover insists on covering every demand point, so it
-pays for a station to reach the single hardest one. Drop that constraint and a
-three-station system still reaches 99.9998% of actual call volume. The entire
-difference between a four-station answer and a three-station answer is a
-rounding error in demand terms, and it is invisible unless you weight demand
-points by how much demand they generate.
-
-That is the result worth taking away: **on this instance the choice of
-objective matters far more than the choice of solver, and the constraint "cover
-every point" quietly means "cover the emptiest point".**
+| Stations | 4 | 3 |
+| Block groups covered | 389 / 389 | 388 / 389 |
+| Share of calls covered | 100% | 99.9998% |
+| Average response time | 4.46 min | 5.22 min |
+| Average per call | 4.13 min | 4.98 min |
+| Worst case | 9.94 min | 10.04 min |
 
 ---
 
-## The models
+## How much does the answer depend on the assumptions?
 
-Both run over the same binary coverage matrix `a_ij`, which is 1 when a station
-at candidate `j` reaches demand point `i` inside the response-time threshold.
-All 389 block groups are simultaneously demand points and candidate sites, so
-the matrix is 389 x 389 with density 0.530.
+Quite a lot, and this was worth checking rather than assuming.
 
-**Set cover.** The cheapest fleet that leaves nobody outside the standard.
+**The assumed driving speed.** Travel time is straight-line distance divided by
+an assumed speed of 40 km/h. Change that one number and the recommendation
+changes by two stations:
 
-```
-min   sum_j y_j
-s.t.  sum_j a_ij y_j >= 1     for every demand point i
-      y_j in {0,1}
-```
+| Speed | Stations needed |
+|---|---|
+| 30 km/h | 5 |
+| 40 km/h | 4 |
+| 50 km/h | 3 |
 
-**Maximal covering (MCLP).** Given a budget of exactly `p` stations, reach as
-much as possible.
+Pittsburgh sits where three rivers meet, so straight-line distance understates
+real driving distance whenever a bridge or a hill is in the way. Every response
+time here is therefore optimistic. Swapping in real road-network routing would
+be the single most useful improvement.
 
-```
-max   sum_i v_i z_i
-s.t.  sum_j y_j = p
-      z_i <= sum_j a_ij y_j   for every demand point i
-      y_j, z_i in {0,1}
-```
+**The response time target.**
 
-`v_i` is where the interesting choice hides. With `v_i = 1` the model maximises
-the *count of block groups* covered and treats a block group generating 200
-calls exactly like one generating 14,481. With `v_i = call_count_i` it maximises
-*covered call volume*. Both are implemented and both are reported, because
-which one you pick is a policy statement, not a technicality.
+| Target | Stations |
+|---|---|
+| 5 min | 10 |
+| 7 min | 6 |
+| 8 min | 4 |
+| 10 min | 4 |
+| 15 min | 2 |
 
-### How hard is the instance, really
+Eight, nine and ten minutes all cost four stations, so arguing about "10 versus
+9" changes nothing. The cost only starts climbing below eight minutes.
 
-| Threshold | Stations | LP bound | Integrality gap | Solve time |
-|---|---|---|---|---|
-| 5 min | 10 | 9.12 | 0.88 | 0.01 s |
-| 7 min | 6 | 6.00 | 0.00 | 0.02 s |
-| 8 min | 4 | 4.00 | 0.00 | 0.02 s |
-| **10 min** | **4** | **3.50** | **0.50** | 0.02 s |
-| 15 min | 2 | 2.00 | 0.00 | 0.01 s |
+![Stations needed versus the response time target](results/figures/threshold_tradeoff.png)
 
-Set cover is NP-hard in general, and this instance is not. Gurobi's presolve
-removes every row and column at the 10-minute threshold and the model is gone
-before branch and bound starts. The LP relaxation is integral at most
-thresholds and the largest gap anywhere is 0.88. Reporting this is the honest
-alternative to implying that a hard combinatorial problem was conquered: the
-geometry of a compact city with 389 candidate sites and a generous radius is
-simply easy.
+**Was this a hard problem?** Not really, and it is worth being honest about
+that. Set cover is famously hard in general, but this particular instance is
+easy: Gurobi's presolve eliminates the whole model before the real search
+begins, and it finishes in about 0.03 seconds. A compact city with 389
+candidate sites and a generous 10 minute radius is just not a difficult case.
 
 ---
 
-## What the answer actually depends on
+## Fairness
 
-Three assumptions move the result more than the optimisation does.
+Neither model knows anything about who lives where. Race, income and population
+appear nowhere in the objective. So any difference in response times between
+neighbourhoods is a side effect of geography and demand, not something the
+model was told to produce.
 
-**Speed, which sets the coverage radius.** Travel time is straight-line
-distance at a constant assumed speed. Vary that one constant and the
-recommendation changes by two stations:
+I still checked, because "the model wasn't told to discriminate" is not the same
+as "the outcome is even."
 
-| Assumed speed | 10-min reach | Stations needed |
+Average response time per call, in minutes:
+
+| Neighbourhood majority | Set cover | Maximal covering |
 |---|---|---|
-| 30 km/h | 5.0 km | 5 |
-| 35 km/h | 5.8 km | 4 |
-| **40 km/h** | **6.7 km** | **4** |
-| 45 km/h | 7.5 km | 3 |
-| 50 km/h | 8.3 km | 3 |
+| Majority White | 3.89 | 5.38 |
+| Majority Black | 4.84 | 3.93 |
+| Gap between best and worst | 1.04 | 1.46 |
 
-Pittsburgh sits at the confluence of three rivers. Straight-line distance
-understates real driving distance wherever a bridge or a hillside is in the
-way, so every response time here is optimistic and 40 km/h is doing a lot of
-quiet work. Swapping in road-network routing is a one-line change (any
-`(lat1, lon1, lat2, lon2) -> minutes` callable can be passed to
-`build_time_matrix`), and it is the single highest-value extension.
+**The two models tilt the gap in opposite directions.** Under set cover,
+majority-Black block groups wait about a minute longer. Under maximal covering
+that flips, and they become the best served group.
 
-The choice between great-circle and flat-earth distance, by contrast, is
-irrelevant here: the two disagree by at most **0.056 minutes** across the whole
-389 x 389 matrix.
+The reason is straightforward once you see where the stations go. Maximal
+covering concentrates its three stations near the dense, high-call-volume core
+of the city, which is disproportionately Black. Set cover spends its fourth
+station reaching the thinly populated edges, which are disproportionately White.
 
-**Where the threshold sits.** Eight, nine and ten minutes all cost four
-stations. The cost only starts climbing below eight, and reaching a five-minute
-standard needs ten stations. A city debating "10 minutes versus 9" is debating
-nothing; a city debating "8 versus 6" is debating a doubling of capital cost.
+![Response time by neighbourhood](results/figures/equity_by_group.png)
 
-![Stations required against the response-time standard](results/figures/threshold_tradeoff.png)
-
-**Which demand points are even visible.** See the data section below.
+Two caveats I want to be upfront about. The "majority Asian" category in the
+full results is a single block group, so it should not be read as a statement
+about a population. And this only measures response time, not who needs an
+ambulance most often, which is a separate question.
 
 ---
 
-## Coverage against budget
+## A data problem that changed the answer
 
-![Coverage against number of stations](results/figures/mclp_coverage_curve.png)
+This turned out to be the most instructive part of the project.
 
-| Stations | % block groups covered | % call volume covered | Same sites under both objectives |
-|---|---|---|---|
-| 1 | 79.4% | 86.6% | no |
-| 2 | 97.7% | 99.7% | yes |
-| 3 | 99.7% | 99.9998% | yes |
-| 4 | 100% | 100% | yes |
+The dispatch records label each call with a census block group ID from the
+**2010** census. The map file and the demographic data both use **2020** IDs.
+Between those two censuses, some block groups were redrawn and renumbered.
 
-Returns collapse almost immediately: two stations reach 99.69% of call volume.
-The two objectives disagree only at `p = 1`, where maximising blocks and
-maximising calls pick different sites, and even there the call-volume
-difference is 0.1 points. On a more spread-out service area the divergence
-would be much larger, which is exactly why it is worth measuring rather than
-assuming.
+If you join the two datasets by matching ID strings, which is the obvious thing
+to do, 87 of the 389 block groups silently fail to match. They do not throw an
+error. They just come back empty and get quietly labelled "unknown."
 
----
+Those 87 block groups contain **26.4% of all the calls.**
 
-## Equity
+The fix is to match on geography instead of on text: take each block group's
+centre point and find which 2020 block group physically contains it. That
+matches all 389, and takes demographic coverage from 73.6% of calls to 100%.
 
-The objective is blind to demographics by construction. Nothing in either model
-knows the racial composition of a block group. Any disparity below is therefore
-a consequence of where demand and geography put the stations.
+This materially changed the fairness numbers above, which is why they are worth
+reporting at all. It is a good reminder that a join can fail silently and still
+give you a plausible looking answer.
 
-![Response time by demographic majority](results/figures/equity_by_group.png)
+![Demand overview](results/figures/demand_profile.png)
 
-Call-weighted mean response time, in minutes:
-
-| Block group majority | Block groups | Calls | Set cover | MCLP |
-|---|---|---|---|---|
-| Majority White | 273 | 422,300 | **3.89** | 5.38 |
-| Majority Black | 72 | 142,006 | 4.84 | **3.93** |
-| Majority Asian | 1 | 839 | 4.74 | 4.29 |
-| Other or mixed | 33 | 48,408 | 3.81 | 4.88 |
-| Spread, best to worst | | | 1.04 min | 1.46 min |
-
-**The two models trade the disparity in opposite directions.** Under set cover,
-majority-Black block groups wait 0.95 minutes longer than majority-White ones.
-Under MCLP the ordering inverts: majority-Black block groups are the
-best-served group and majority-White ones the worst. Neither model was told to
-care. The reversal happens because MCLP concentrates its three stations near
-the dense, high-call-rate core, which is disproportionately Black, while set
-cover spends its fourth station reaching the sparse periphery, which is
-disproportionately White.
-
-The share of calls reached within a tighter five-minute benchmark tells the
-same story more sharply: set cover reaches 70.4% of majority-White calls but
-58.6% of majority-Black calls, while MCLP reaches 42.8% and 61.8%.
-
-Two honest caveats. The majority-Asian row is a single block group and should
-not be read as a statement about a population. And per-capita call rates differ
-enormously across groups (majority-Black block groups generate about 2,100
-calls per 1,000 residents against 1,400 for majority-White), so response-time
-equity and per-capita-burden equity are different questions and this analysis
-only addresses the first.
-
----
-
-## The data problem worth knowing about
-
-![Demand profile](results/figures/demand_profile.png)
-
-The dispatch records span 2015 to 2024 and carry GEOIDs geocoded against **2010**
-census block groups. The TIGER shapefile and the Social Explorer extract are
-both **2020** vintage. Joining them on the GEOID string, which is the obvious
-thing to do, matches only 302 of 389 block groups. The 87 that fail to match
-carry **26.4% of all calls**, and they fail silently: the join simply produces
-nulls, the nulls get labelled "unknown", and the equity analysis runs on three
-quarters of the demand without anything going visibly wrong.
-
-The fix is to join on geography rather than on strings. `crosswalk_to_2020`
-locates each 2010 centroid inside whichever 2020 block group actually contains
-it, which resolves all 389 points and takes demographic coverage from 73.6% of
-calls to 100%. The 389 demand points collapse onto 332 distinct 2020 block
-groups, since the 2020 redraw merged some neighbours.
-
-This changes the equity numbers materially, and it is the reason they are worth
-reporting at all.
-
-Other things the data says: demand is uneven but not hotspot-dominated (Gini
-0.49, busiest 10% of block groups carry 36% of calls), serious calls (E0-E2)
-outnumber routine ones roughly three to one and have grown about 15% since
-2015, and 2020 is a visible dip in both.
+Other things worth noting from the data: demand is uneven but not dominated by a
+few hotspots (the busiest 10% of block groups account for 36% of calls), serious
+calls outnumber routine ones roughly three to one, and there is a visible dip in
+2020.
 
 ---
 
 ## Interactive maps
 
-Two self-contained HTML maps, about 3 MB each, with layered choropleths for
-response time, call volume, calls per capita, population, and racial
-composition, plus station markers and their coverage radii.
+Two self-contained HTML maps with switchable layers for response time, call
+volume, calls per person, population and demographics, plus the station
+locations and their coverage radii.
 
 - [`results/maps/set_cover_solution.html`](results/maps/set_cover_solution.html)
 - [`results/maps/mclp_solution.html`](results/maps/mclp_solution.html)
 
-Download and open in a browser, or view through
-[nbviewer](https://nbviewer.org/) / [raw.githack.com](https://raw.githack.com/).
-
-An earlier version of these maps was 24 MB and 16 MB, because tooltips were
-added by creating one `folium.GeoJson` object per block group, which
-re-serialises the polygon geometry once per block group per layer. Passing the
-whole layer to a single `GeoJson` with a `GeoJsonTooltip`, and simplifying the
-polygons at a 2 m tolerance (0.0015% total area change), gives the same
-interaction at an eighth of the size.
+Download and open in a browser.
 
 ---
 
@@ -241,12 +213,10 @@ interaction at an eighth of the size.
 pip install -r requirements.txt
 ```
 
-`gurobipy` from pip ships a size-limited licence that is comfortably larger
-than these models need (778 variables at most).
-
-The raw dispatch extract is 372 MB and is not in the repository. Download it
-from the [Allegheny County 911 dispatches dataset](https://catalog.data.gov/dataset/allegheny-county-911-dispatches-ems-and-fire)
-into `data/raw/`, and the [2020 TIGER block group shapefile for Pennsylvania](https://www2.census.gov/geo/tiger/TIGER2020/BG/tl_2020_42_bg.zip)
+The raw dispatch file is 372 MB and is not stored here. Download it from the
+[Allegheny County 911 dispatch dataset](https://catalog.data.gov/dataset/allegheny-county-911-dispatches-ems-and-fire)
+into `data/raw/`, and the
+[2020 census block group shapefile for Pennsylvania](https://www2.census.gov/geo/tiger/TIGER2020/BG/tl_2020_42_bg.zip)
 into `data/geo/`. Then:
 
 ```bash
@@ -257,37 +227,38 @@ python -m src.data_prep
 python -m src.run_analysis
 ```
 
-`data_prep` takes a couple of minutes, `run_analysis` about thirty seconds. The
-derived tables in `data/processed/` are committed, so `run_analysis` works
-without the raw download if you only want to reproduce the results.
+The processed data files are included in the repo, so if you only want to
+reproduce the results you can skip the download and run the second command.
 
 ```bash
 pytest tests/
 ```
 
+22 tests covering the distance calculations and the two models.
+
 ---
 
-## Layout
+## What is in here
 
 ```
 src/
-  data_prep.py      raw extract -> demand points, demand panel, demographics, geometry
-  coverage.py       travel-time functions and the binary coverage matrix
-  models.py         set cover, MCLP, LP relaxation, nearest-station assignment
-  equity.py         response-time distributions by demographic group
-  mapping.py        Folium maps
-  run_analysis.py   solves everything, writes every table and figure
-tests/              coverage-matrix and model invariants
-data/processed/     committed derived tables
-results/            tables, figures, maps
+  data_prep.py      cleans the raw data and fixes the 2010/2020 mismatch
+  coverage.py       travel times and the coverage matrix
+  models.py         set cover and maximal covering, solved with Gurobi
+  equity.py         response times broken down by neighbourhood
+  mapping.py        the interactive maps
+  run_analysis.py   runs everything and writes all results
+notebooks/
+  facility_location_walkthrough.ipynb    step by step version
+results/            tables, figures and maps
 ```
 
-Every number in this README comes from `python -m src.run_analysis`.
+Every number quoted above comes from `python -m src.run_analysis`.
 
 ## Data sources
 
 - [Allegheny County 911 Dispatches, EMS and Fire](https://catalog.data.gov/dataset/allegheny-county-911-dispatches-ems-and-fire), 2015 to 2024
-- [Social Explorer](https://www.socialexplorer.com/), ACS population, race and housing by block group
+- [Social Explorer](https://www.socialexplorer.com/), census population and housing data
 - [US Census TIGER/Line 2020](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html) block group boundaries
 
 ## Licence
